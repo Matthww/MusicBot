@@ -699,7 +699,7 @@ class MusicBot(discord.Client):
         """
 
     async def on_player_play(self, player, entry):
-        await self.update_now_playing(entry)
+        await self.update_now_playing_status(entry)
         player.skip_state.reset()
         channel = entry.meta.get('channel', None)
         author = entry.meta.get('author', None)
@@ -2547,7 +2547,7 @@ class MusicBot(discord.Client):
         self.config.playing_status = boolean_states[boolean]
 
         if self.config.playing_status:
-            await self.update_now_playing()
+            await self.update_now_playing_status()
         else:
             await self.change_status(None)
 
