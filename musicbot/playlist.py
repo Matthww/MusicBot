@@ -123,6 +123,22 @@ class Playlist(EventEmitter, Serializable):
         self._add_entry(entry)
         return entry, len(self.entries)
 
+    async def afk(self, channel, afkler):
+        """
+        Removes the songs of the given ID from the queue.
+        """
+        hasrun = False
+        newqueue = [item for item in list(self.entries) if not item.idcheck(afkler)]
+        if len(newqueue) == len(self.entries):
+            hasrun = False
+        else:
+            hasrun = True    
+        
+        if hasrun:            
+            self.entries = deque(newqueue)
+            
+        return hasrun
+
     async def add_stream_entry(self, song_url, info=None, **meta):
         if info is None:
             info = {'title': song_url, 'extractor': None}

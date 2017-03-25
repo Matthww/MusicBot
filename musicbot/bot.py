@@ -6,6 +6,7 @@ import time
 import shlex
 import shutil
 import random
+from random import choice, shuffle, randint
 import inspect
 import logging
 import asyncio
@@ -48,6 +49,70 @@ from .constants import DISCORD_MSG_CHAR_LIMIT, AUDIO_CACHE_PATH
 load_opus_lib()
 
 log = logging.getLogger(__name__)
+
+class SkipState:
+    """
+    Keeps a list of all users that used Skip
+    Methods: skip_count() reset() add_hyper()
+    """
+    def __init__(self):
+        self.skippers = set()
+        self.skip_msgs = set()
+
+    @property
+    def skip_count(self):
+        """Returns the current amount of Skippers"""
+        return len(self.skippers)
+
+    def reset(self):
+        """Empties the Skipper List"""
+        self.skippers.clear()
+        self.skip_msgs.clear()
+
+    def add_skipper(self, skipper, msg):
+        """Adds a user to the list of Skippers, returns new skip_count"""
+        self.skippers.add(skipper)
+        self.skip_msgs.add(msg)
+        return self.skip_count
+
+class HypeState:
+    """
+    Keeps a list of all users that used Hype
+    Methods: hype_count() reset() add_hyper()
+    """
+    def __init__(self):
+        self.hypers = set()
+        self.hype_msgs = set()
+
+    @property
+    def hype_count(self):
+        """Returns the current amount of Hypers"""
+        return len(self.hypers)
+
+    def reset(self):
+        """Empties the Hypers List"""
+        self.hypers.clear()
+        self.hype_msgs.clear()
+
+    def add_hyper(self, hyper, msg):
+        """Adds a user to the list of Hypers, returns new hype_count"""
+        self.hypers.add(hyper)
+        self.hype_msgs.add(msg)
+        return self.hype_count
+
+
+class Response:
+    """
+    Posts a response to the author of the command
+    Args:
+        content: Message to be sent
+        reply: Set to True to mention the User
+        delete_after: Set to int Seconds to delete Response
+    """
+    def __init__(self, content, reply=False, delete_after=0):
+        self.content = content
+        self.reply = reply
+        self.delete_after = delete_after
 
 
 class MusicBot(discord.Client):
@@ -522,6 +587,49 @@ class MusicBot(discord.Client):
         for vc in list(self.voice_clients).copy():
             await self.disconnect_voice_client(vc.channel.server)
 
+    """
+	Custom shizzle:
+    """
+    async def log(self, string, channel=None, expire_in=0):
+        """
+            Logs information to a Discord text channel
+            :param channel: - The channel the information originates from
+        """
+        x=expire_in
+        if channel:
+            if self.config.log_subchannels:
+                for i in set(self.config.log_subchannels):
+                    subchannel = self.get_channel(i)
+                    if not subchannel:
+                        self.config.log_subchannels.remove(i)
+                        print("[Warning] Bot can't find logging subchannel: {}".format(i))
+                    else:
+                        server = subchannel.server
+                        if channel in server.channels:
+                            await self.safe_send_message(subchannel, ":stopwatch: `{}` ".format(time.strftime(self.config.log_timeformat)) + string, expire_in=x)
+
+            if self.config.log_masterchannel:
+                id = self.config.log_masterchannel
+                master = self.get_channel(id)
+                if not master:
+                    self.config.log_masterchannel = None
+                    print("[Warning] Bot can't find logging master channel: {}".format(id))
+                else:
+                    await self.safe_send_message(master, ":stopwatch: `{}` :mouse_three_button: `{}` ".format(time.strftime(self.config.log_timeformat), channel.server.name) + string, expire_in=x)
+
+        else:
+            if self.config.log_masterchannel:
+                id = self.config.log_masterchannel
+                master = self.get_channel(id)
+                if not master:
+                    self.config.log_masterchannel = None
+                    print("[Warning] Bot can't find logging master channel: {}".format(id))
+                else:
+                    await self.safe_send_message(master, ":stopwatch: `{}` ".format(time.strftime(self.config.log_timeformat)) + string, expire_in=x)
+    """
+	Custom shizzle END
+	"""
+
     async def set_voice_state(self, vchannel, *, mute=False, deaf=False):
         if isinstance(vchannel, discord.Object):
             vchannel = self.get_channel(vchannel.id)
@@ -579,21 +687,27 @@ class MusicBot(discord.Client):
             .on('error', self.on_player_error)
 
         player.skip_state = SkipState()
-
+        player.hype_state = HypeState()
+        self.players[server.id] = player
+			
+        return self.players[server.id]
+        """
         if server:
             self.players[server.id] = player
 
         return player
+        """
 
     async def on_player_play(self, player, entry):
-        await self.update_now_playing_status(entry)
+        await self.update_now_playing(entry)
         player.skip_state.reset()
-
-        # This is the one event where its ok to serialize autoplaylist entries
-        await self.serialize_queue(player.voice_client.channel.server)
-
         channel = entry.meta.get('channel', None)
         author = entry.meta.get('author', None)
+        totalhypes = player.hype_state.hype_count
+        totalhypemsg = 'The previous song got %s Hypes' % (totalhypes)
+        if channel:
+            await self.safe_send_message(channel, totalhypemsg, expire_in=30)
+        player.hype_state.reset()
 
         if channel and author:
             last_np_msg = self.server_specific_data[channel.server]['last_np_msg']
@@ -1777,7 +1891,7 @@ class MusicBot(discord.Client):
             action_text = 'Streaming' if streaming else 'Playing'
 
             if player.current_entry.meta.get('channel', False) and player.current_entry.meta.get('author', False):
-                np_text = "Now {action}:\n:notes: **{title}** added by **{author}**\nProgress: {progress_bar} {progress}\n\N{WHITE RIGHT POINTING BACKHAND INDEX} <{url}>".format(                    action=action_text,
+                np_text = "Now {action}:\n:notes: **{title}** added by **{author}**\nProgress: {progress_bar} {progress}\n\n\N{WHITE RIGHT POINTING BACKHAND INDEX} <{url}>".format(                    action=action_text,
                 # NOT TESTED | 123123
                 # np_text = "Now Playing:\n :notes: **%s**\n  added by **%s** %s\n" % Progress: {progress_bar} {progress}\n\N{WHITE RIGHT POINTING BACKHAND INDEX} <{url}>".format(                    action=action_text,
 
@@ -1789,7 +1903,7 @@ class MusicBot(discord.Client):
                     url = player.current_entry.url
                 )
             else:
-                np_text = "Now {action}:\n:notes:  **{title}**\nProgress: {progress_bar} {progress}\n\N{WHITE RIGHT POINTING BACKHAND INDEX} <{url}>".format(
+                np_text = "Now {action}:\n:notes:  **{title}**\nProgress: {progress_bar} {progress}\n\n\N{WHITE RIGHT POINTING BACKHAND INDEX} <{url}>".format(
                 # NOT TESTED | 123123
                 # np_text = "Now Playing:\n:notes:  **%s** %s\n" % \nProgress: {progress_bar} {progress}\n\N{WHITE RIGHT POINTING BACKHAND INDEX} <{url}>".format(
                     action = action_text,
@@ -1952,124 +2066,103 @@ class MusicBot(discord.Client):
         """
         Usage:
             {command_prefix}skip
-
-        Skips the current song when enough votes are cast, or by the bot owner.
+        Skips the current song when enough votes are cast.
         """
 
         if player.is_stopped:
-            raise exceptions.CommandError("Can't skip! The player is not playing!", expire_in=15)
+            raise exceptions.CommandError("Can't skip! The player is not playing!", expire_in=20)
 
         if not player.current_entry:
             if player.playlist.peek():
                 if player.playlist.peek()._is_downloading:
-                    return Response("Please wait while\n**%s**\nis downloading!" % player.playlist.peek().title, delete_after=15)
+                    # print(player.playlist.peek()._waiting_futures[0].__dict__)
+                    return Response("Please wait while\n**%s**\nis downloading!" % player.playlist.peek().title, delete_after=20)
 
                 elif player.playlist.peek().is_downloaded:
-                    print("The next song will be played shortly.")
-                    print("[SKIP] Ignored skip. The next song will be played shortly")
+                    print("The next song will be played shortly.  Please wait.")
                 else:
-                    print("[WARNING] Something odd is happening.  "
-                          "You might want to restart the bot if it doesn't start working")
+                    print("Something odd is happening.  "
+                          "You might want to restart the bot if it doesn't start working.")
             else:
-                print("[WARNING] Something strange is happening.  "
-                      "You might want to restart the bot if it doesn't start working")
+                print("Something strange is happening.  "
+                      "You might want to restart the bot if it doesn't start working.")
 
-        """
-        if author.id == self.config.owner_id \
-                or permissions.instaskip \
-		"""
-        if permissions.instaskip or author == player.current_entry.meta.get('author', None):
+
+        if author == player.current_entry.meta.get('author', None):
             player.skip()  # check autopause stuff here
             await self._manual_delete_check(message)
             return
 
-        # TODO: ignore person if they're deaf or take them out of the list or something?
-        # Currently is recounted if they vote, deafen, then vote
-
+        if author.self_deaf == True or author.deaf == True:
+            return Response('You cannot use !skip while deafened',reply=True,delete_after=20)
+            
         num_voice = sum(1 for m in voice_channel.voice_members if not (
-            m.deaf or m.self_deaf or m.id in [self.config.owner_id, self.user.id]))
+            m.deaf or m.self_deaf or m.id in [self.user.id]))
 
         num_skips = player.skip_state.add_skipper(author.id, message)
-
-        skips_remaining = min(
-            self.config.skips_required,
-            math.ceil(self.config.skip_ratio_required / (1 / num_voice)) # Number of skips from config ratio
-        ) - num_skips
-
+        
+        if num_voice > 2:
+            skips_remaining = min(self.config.skips_required,
+                              sane_round_int(num_voice * self.config.skip_ratio_required)) - num_skips
+        else:
+            if num_voice == 2:
+                skips_remaining = 1 - num_skips
+            
+            else:
+                skips_remaining = 0
+              
         if skips_remaining <= 0:
             player.skip()  # check autopause stuff here
             return Response(
-                '\'s skip for\n**{}** was acknowledged!'
+                'your skip for **{}** was acknowledged.'
                 '\nThe vote to skip has been passed.{}'.format(
                     player.current_entry.title,
                     ' Next song coming up!' if player.playlist.peek() else ''
                 ),
                 reply=True,
-                delete_after=10
+                delete_after=20
             )
 
         else:
-            #XFLARE
-            if skips_remaining == 1: skips_remaining = ":one:"
-            elif skips_remaining == 2: skips_remaining = ':two:'
-            elif skips_remaining == 3: skips_remaining = ':three:'
-            elif skips_remaining == 4: skips_remaining = ':four:'
-            elif skips_remaining == 5: skips_remaining = ':five:'
-            elif skips_remaining == 6: skips_remaining = ':six:'
-            elif skips_remaining == 7: skips_remaining = ':seven:'
-            elif skips_remaining == 8: skips_remaining = ':eight:'
-            elif skips_remaining == 9: skips_remaining = ':nine:'
-            elif skips_remaining == 10: skips_remaining = ':ten:'
-
-
             # TODO: When a song gets skipped, delete the old x needed to skip messages
             return Response(
-                '\'skip for\n**{}** was acknowledged!'
+                'your skip for **{}** was acknowledged.'
                 '\n**{}** more {} required to vote to skip this song.'.format(
                     player.current_entry.title,
                     skips_remaining,
                     'person is' if skips_remaining == 1 else 'people are'
                 ),
                 reply=True,
-                delete_after=10
+                delete_after=20
             )
 
-    async def cmd_instaskip(self, player, channel, author, message, permissions, voice_channel):
+    async def cmd_instaskip(self, player):
         """
         Usage:
             {command_prefix}instaskip
-
-        Instaskips the song if the user has the permissions
+        Instantly skips the current song.
         """
 
         if player.is_stopped:
-            raise exceptions.CommandError("Can't skip! The player is not playing!", expire_in=10)
+            raise exceptions.CommandError("Can't skip! The player is not playing!")
 
         if not player.current_entry:
             if player.playlist.peek():
                 if player.playlist.peek()._is_downloading:
-                    return Response("Please wait while\n**%s**\nis downloading!" % player.playlist.peek().title, delete_after=10)
+                    print(player.playlist.peek()._waiting_futures[0].__dict__)
+                    return Response("The next song (%s) is downloading, please wait." % player.playlist.peek().title)
 
                 elif player.playlist.peek().is_downloaded:
-                    print("The next song will be played shortly.")
-                    print("[SKIP] Ignored skip. The next song will be played shortly")
+                    print("The next song will be played shortly.  Please wait.")
                 else:
-                    print("[WARNING] Something odd is happening.  "
-                          "You might want to restart the bot if it doesn't start working")
+                    print("Something odd is happening.  "
+                          "You might want to restart the bot if it doesn't start working.")
             else:
-                print("[WARNING] Something strange is happening.  "
-                      "You might want to restart the bot if it doesn't start working")
-
-        # if author.id == self.config.owner_id or permissions.instaskip
-
-        if permissions.instaskip or author == player.current_entry.meta.get('author', None):
+                print("Something strange is happening.  "
+                      "You might want to restart the bot if it doesn't start working.")
+        else: 
             player.skip()  # check autopause stuff here
-            await self._manual_delete_check(message)
-            return
-
-        else:
-            player.skip()
-			return Response("Succesfully force skipped current song!", expire_in=10)
+        return
 
 			
     async def cmd_volume(self, message, player, new_volume=None):
@@ -2665,6 +2758,270 @@ class MusicBot(discord.Client):
             reply_text = "Must specify an index to remove (AKA a number)"
 
             return Response(reply_text)
+			
+    async def cmd_afk(self, channel, player, author):
+        """
+        Usage:
+            {command_prefix}afk
+        Removes the authors songs from the song queue.
+        """
+        afkler = author.id
+        result = await player.playlist.afk(channel, afkler) # Main code in playlist.py, waits for it to finish then continues.
+        if result:
+            return Response("Done, see you later!", reply=True, delete_after=30)
+        else:
+            return Response("Nothing queued from you, or error while running!", reply=True, delete_after=30)
+			
+    async def cmd_afkother(self, channel, player, author, user_mentions):
+        """
+        Usage:
+            {command_prefix}afkother @User
+        Removes the mentioned users songs from the song queue.
+        """
+        if not user_mentions: #check for mention
+            return Response("You have to mention a user to remove songs for!", reply=True, delete_after=20)
+        usr = user_mentions[0]
+        afkler = usr.id
+        result = await player.playlist.afk(channel, afkler) #The main code has to be in playlist.py
+        if result:
+            return Response("Done, %s's songs were removed." % (usr.name), reply=True, delete_after=30)
+        else: #If it didn't run
+            return Response("Nothing queued from %s, or error while running!" % (usr.name), reply=True, delete_after=30)    
+			
+    async def cmd_food(self, author, user_mentions):
+        """
+        Usage:
+            {command_prefix}food
+        Gives you Food or the Person you mentioned.
+        """
+        emoji = [
+            "a :pizza: ",
+            "an :apple: ",
+            "a :peach: ",
+            "a :hamburger: ",
+            ":fries: ",
+            "a :eggplant: ",
+            "a :strawberry: ",
+            "a :watermelon: ",
+            "a :chestnut: ",
+            "a :ear_of_rice: ",
+            "a :banana: ",
+            "a :pineapple: ",
+            "a :poultry_leg: ",
+            "a :tangerine: ",
+            "mom's :spaghetti: ",
+            "a :herb: ",
+            "some :grapes: ",
+            "some :cherries: ",
+            ":shaved_ice: ",
+            "some :bread: ",
+            "a :fried_shrimp: ",
+            "a :fish_cake: ",
+            "a :bento: ",
+            "a :mushroom: which may or may not be poisonous",
+            "some :ramen: ",
+            "a :rice: ",
+            "a :lemon: ",
+            "an :egg: ",
+            "a :corn: ",
+            "a :green_apple: ",
+            "a :meat_on_bone: ",
+            "a :honey_pot: ",
+            "a :tomato:",
+            "a :stew: ",
+            "a :melon: ",
+            "a :curry: ",
+            "a :custard: ",
+            "a :rice_ball: ",
+            "a :pear: ",
+            "a :dango: ",
+            "a :sweet_potato: ",
+            #drinks
+            "a :beer: ",
+            "a :coffee: ",
+            "a :tropical_drink: ",
+            "a :wine_glass: ",
+            "a :cocktail: ",
+            "a :baby_bottle: ",
+            "a :tea:",
+            "a :sake: ",
+            "a :oden: ",
+            #sweets
+            "a :ice_cream: ",
+            "a :chocolate_bar: ",
+            "a :doughnut: ",
+            "a :cake: ",
+            "a :cookie: ",
+            "a :lollipop: ",
+            "**free** :candy: ",
+            "some :ice_cream: ",
+            "a :rice_cracker: "
+        ]
+        
+        if not user_mentions: 
+            return Response("Here have %s" % (choice(emoji)))
+        else:
+            usr = user_mentions[0]
+            return Response("%s have %s to eat from %s" % (usr.mention, choice(emoji), author.name))
+
+    async def cmd_hype(self, player, channel, author, message, permissions, voice_channel):
+        """
+        Usage:
+            {command_prefix}hype
+        Adds a Hype vote to the current song.
+        """
+
+        if player.is_stopped:
+            raise exceptions.CommandError("Can't hype! The player is not playing!", expire_in=20)
+
+        if not player.current_entry:
+            if player.playlist.peek():
+                if player.playlist.peek()._is_downloading:
+                    print(player.playlist.peek()._waiting_futures[0].__dict__)
+                    return Response("The next song (%s) is downloading, please wait." % player.playlist.peek())
+
+                elif player.playlist.peek().is_downloaded:
+                    print("The next song will be played shortly.  Please wait.")
+                else:
+                    print("Something odd is happening.  "
+                          "You might want to restart the bot if it doesn't start working.")
+            else:
+                print("Something strange is happening.  "
+                      "You might want to restart the bot if it doesn't start working.")
+
+        if player.current_entry.meta.get('channel', False) and player.current_entry.meta.get('author', False):
+            player.current_entry.meta.get('author', False)
+            if author.id == player.current_entry.meta['author'].id: #If person that requested the song skips, skip instantly
+                await self._manual_delete_check(message)
+                return Response('You cannot hype your own songs!',reply=True,delete_after=30)
+
+        if author.self_deaf == True or author.deaf == True:
+            return Response('You cannot use !hype while deafened',reply=True,delete_after=20)
+            
+
+        num_hypes = player.hype_state.add_hyper(author.id, message)
+
+        return Response(
+                'your Hype for **{}** was acknowledged.'
+                '\nThe song now has **{}** Hypes.'.format(
+                    player.current_entry.title,
+                    num_hypes
+                ),
+                reply=True,
+                delete_after=20
+            )
+
+    async def cmd_prune(self, message, channel, server, author, search_range=50):
+        """
+        Usage:
+            {command_prefix}prune [range]
+        Removes up to [range] messages the bot has posted in chat. Default: 50, Max: 1000
+        """
+
+        try:
+            float(search_range)  # lazy check
+            search_range = min(int(search_range), 1000)
+        except:
+            return Response("enter a number.  NUMBER.  That means digits.  `15`.  Etc.", reply=True, delete_after=8)
+
+        await self.safe_delete_message(message, quiet=True)
+
+        def is_possible_command_invoke(entry):
+            valid_call = any(
+                entry.content.startswith(prefix) for prefix in [self.config.command_prefix])  # can be expanded
+            return valid_call and not entry.content[1:2].isspace()
+
+        delete_invokes = True
+        delete_all = channel.permissions_for(author).manage_messages or self.config.owner_id == author.id
+
+        def check(message):
+            if is_possible_command_invoke(message) and delete_invokes:
+                return delete_all or message.author == author
+            return message.author == self.user
+
+        if self.user.bot:
+            if channel.permissions_for(server.me).manage_messages:
+                deleted = await self.purge_from(channel, check=check, limit=search_range, before=message)
+                if self.config.log_interaction:
+                    await self.log(':bomb: Purged `{}` message{} in #`{}`'.format(len(deleted), 's' * bool(deleted), channel.name), channel)
+                return Response('Cleaned up {} message{}.'.format(len(deleted), 's' * bool(deleted)), delete_after=15)
+
+        deleted = 0
+        async for entry in self.logs_from(channel, search_range, before=message):
+            if entry == self.server_specific_data[channel.server]['last_np_msg']:
+                continue
+
+            if entry.author == self.user:
+                await self.safe_delete_message(entry)
+                deleted += 1
+                await asyncio.sleep(0.21)
+
+            if is_possible_command_invoke(entry) and delete_invokes:
+                if delete_all or entry.author == author:
+                    try:
+                        await self.delete_message(entry)
+                        await asyncio.sleep(0.21)
+                        deleted += 1
+
+                    except discord.Forbidden:
+                        delete_invokes = False
+                    except discord.HTTPException:
+                        pass
+
+        if self.config.log_interaction:
+            await self.log(':bomb: Purged `{}` message{} in #`{}`'.format(deleted, 's' * bool(deleted), channel.name), channel)
+        return Response('Cleaned up {} message{}.'.format(deleted, 's' * bool(deleted)), delete_after=15)
+			
+    async def cmd_riot(self, author, channel):
+        """
+        Usage:
+            {command_prefix}riot
+        You will start rioting.
+        Warning: The bot might not like that.
+        """
+        case=0 #this will be randint(0,casenumber) when more than 1 case is implemented.
+        if author.id in self.rioters: #duplicate atm but just in case
+            return Response("You are already rioting!", reply=True, delete_after=10)
+
+        if case == 0:
+            self.rioters.add(author.id)
+            self.blacklist.add(author.id)
+            return Response("I think you need to calm down, use the icave command when you calmed down!")
+
+
+    async def cmd_icave(self, author, channel):
+        """
+        Usage:
+            {command_prefix}icave
+            
+        Caves to the bots demands
+        """
+        if author.id not in self.blacklist:
+            return Response("You don't need to cave!", delete_after=20)    
+    
+        if author.id in self.blacklist and author.id not in self.rioters:
+            return Response("Nice Try, but you are manually blacklisted", reply=True, delete_after=5)
+
+        else:
+            self.blacklist.remove(author.id)
+            self.rioters.remove(author.id)
+            return Response("Nice to see you calm down, removed from the blacklist", reply=True, delete_after=20)
+
+    async def cmd_cookie(self, author, user_mentions):
+        """
+        Usage:
+            {command_prefix}cookie [@user]
+        Gives the author a cookie or the user the author mentions.
+        """
+        i = randint(1, 20)
+        if not user_mentions:
+            return Response("Here have a :cookie:", reply=True, delete_after=30)
+        else:
+            usr = user_mentions[0]
+            if i != 20:
+                return Response("%s here is a :cookie: for you from %s" % (usr.mention, author.name), reply=False, delete_after=30)
+            else:
+                return Response("%s here is a :pizza: for you from %s \nWait that is not right! \nTell gfrew to fix me!" % (usr.mention, author.name), reply=False, delete_after=30)
 
 
     """END Custom COMMANDS!!"""
@@ -2989,3 +3346,4 @@ class MusicBot(discord.Client):
             log.debug("Pausing player in \"{}\" due to unavailability.".format(server.name))
             self.server_specific_data[server]['availability_paused'] = True
             player.pause()
+			
