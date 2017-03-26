@@ -2233,10 +2233,10 @@ class MusicBot(discord.Client):
             prog_str = '`[%s/%s]`' % (song_progress, song_total)
 
             if player.current_entry.meta.get('channel', False) and player.current_entry.meta.get('author', False):
-                lines.append("Now Playing:\n:notes:  **%s** added by **%s** %s\n" % (
+                lines.append("Now Playing:\n\n:notes:  **%s** added by **%s** %s\n" % (
                     player.current_entry.title, player.current_entry.meta['author'].name, prog_str))
             else:
-                lines.append("Now Playing:\n:notes:  **%s** %s\n" % (player.current_entry.title, prog_str))
+                lines.append("Now Playing:\n\n:notes:  **%s** %s\n" % (player.current_entry.title, prog_str))
 
         for i, item in enumerate(player.playlist, 1):
 
@@ -2274,7 +2274,7 @@ class MusicBot(discord.Client):
                 'There are no songs queued... Queue something  with {}play'.format(self.config.command_prefix))
 
         message = '\n'.join(lines)
-        return Response(message, delete_after=20)
+        return Response(message, delete_after=25)
 
     async def cmd_clean(self, message, channel, server, author, search_range=50):
         """
@@ -2968,9 +2968,7 @@ class MusicBot(discord.Client):
                     except discord.HTTPException:
                         pass
 
-        if self.config.log_interaction:
-            await self.log(':bomb: Purged `{}` message{} in #`{}`'.format(deleted, 's' * bool(deleted), channel.name), channel)
-        return Response('Cleaned up {} message{}.'.format(deleted, 's' * bool(deleted)), delete_after=15)
+        return Response(':bomb: Purged `{}` message{} in #`{}`'.format(deleted, 's' * bool(deleted), channel.name), channel)
 			
     async def cmd_riot(self, author, channel):
         """
