@@ -264,8 +264,8 @@ class MusicPlayer(EventEmitter, Serializable):
                 self._kill_current_player()
 
                 boptions = "-nostdin"
-                # aoptions = "-vn -b:a 192k"
-                aoptions = "-vn"
+                aoptions = "-vn -b:a 192k"
+                # aoptions = "-vn"
 
                 log.ffmpeg("Creating player with options: {} {} {}".format(boptions, aoptions, entry.filename))
 
@@ -310,24 +310,18 @@ class MusicPlayer(EventEmitter, Serializable):
                 self._current_player._connected.set()
 
     async def websocket_check(self):
-        log.voicedebug("Starting websocket check loop for {}".format(self.voice_client.channel.server))
+        if self.bot.config.debug_mode:
+            print("[Debug] Creating websocket check loop")
 
         while not self.is_dead:
             try:
-                async with self.bot.aiolocks[self.reload_voice.__name__ + ':' + self.voice_client.channel.server.id]:
-                    await self.voice_client.ws.ensure_open()
-
-            except InvalidState:
-                log.debug("Voice websocket for \"{}\" is {}, reconnecting".format(
-                    self.voice_client.channel.server,
-                    self.voice_client.ws.state_name
-                ))
-                await self.bot.reconnect_voice_client(self.voice_client.channel.server, channel=self.voice_client.channel)
-                await asyncio.sleep(3)
-
-            except Exception:
-                log.error("Error in websocket check loop", exc_info=True)
-
+                self.voice_client.ws.ensure_open()
+                assert self.voice_client.ws.open
+            except:
+                if self.bot.config.debug_mode:
+                    print("[Debug] Voice websocket is %s, reconnecting" % self.voice_client.ws.state_name)
+                await self.bot.reconnect_voice_client(self.voice_client.channel.server)
+                await asyncio.sleep(4)
             finally:
                 await asyncio.sleep(1)
 

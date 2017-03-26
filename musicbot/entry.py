@@ -2,6 +2,10 @@ import os
 import asyncio
 import logging
 import traceback
+import re
+
+# import urllib.request as request
+# import urllib.parse as parse
 
 from enum import Enum
 from .constructs import Serializable
@@ -23,6 +27,7 @@ class EntryTypes(Enum):
 class BasePlaylistEntry(Serializable):
     def __init__(self):
         self.filename = None
+        self.filename_thumbnail = None
         self._is_downloading = False
         self._waiting_futures = []
 
@@ -96,9 +101,11 @@ class URLPlaylistEntry(BasePlaylistEntry):
             'url': self.url,
             'title': self.title,
             'duration': self.duration,
+			# 'thumbnail': self.url_thumbnail,
             'downloaded': self.is_downloaded,
             'expected_filename': self.expected_filename,
             'filename': self.filename,
+			'filename_thumbnail': self.filename_thumbnail,
             'full_filename': os.path.abspath(self.filename) if self.filename else self.filename,
             'meta': {
                 name: {
@@ -120,6 +127,7 @@ class URLPlaylistEntry(BasePlaylistEntry):
             duration = data['duration']
             downloaded = data['downloaded']
             filename = data['filename'] if downloaded else None
+            filename_thumbnail = data['filename_thumbnail'] if downloaded else None
             expected_filename = data['expected_filename']
             meta = {}
 
@@ -153,7 +161,11 @@ class URLPlaylistEntry(BasePlaylistEntry):
 
             # the generic extractor requires special handling
             if extractor == 'generic':
-                flistdir = [f.rsplit('-', 1)[0] for f in os.listdir(self.download_folder)]
+                # flistdir = [f.rsplit('-', 1)[0] for f in os.listdir(self.download_folder)]
+                # remove thumbnail images from list
+                imgPattern = re.compile('(\.(jpg|jpeg|png|gif|bmp))$', flags=re.IGNORECASE)
+                flistdir = [f.rsplit('-', 1)[0] for f in os.listdir(self.download_folder) if not imgPattern.search(f)]
+                expected_fname_noex, fname_ex = os.path.basename(self.expected_filename).rsplit('.', 1)
                 expected_fname_noex, fname_ex = os.path.basename(self.expected_filename).rsplit('.', 1)
 
                 if expected_fname_noex in flistdir:
@@ -182,7 +194,9 @@ class URLPlaylistEntry(BasePlaylistEntry):
                     await self._really_download(hash=True)
 
             else:
-                ldir = os.listdir(self.download_folder)
+                # ldir = os.listdir(self.download_folder)
+                imgPattern = re.compile('(\.(jpg|jpeg|png|gif|bmp))$', flags=re.IGNORECASE)
+                ldir = [f for f in os.listdir(self.download_folder) if not imgPattern.search(f)]
                 flistdir = [f.rsplit('.', 1)[0] for f in ldir]
                 expected_fname_base = os.path.basename(self.expected_filename)
                 expected_fname_noex = expected_fname_base.rsplit('.', 1)[0]
@@ -232,6 +246,11 @@ class URLPlaylistEntry(BasePlaylistEntry):
 
         self.filename = unhashed_fname = self.playlist.downloader.ytdl.prepare_filename(result)
 
+        # Search for file name with an image suffix
+        imgPattern = re.compile(self.filename.lstrip(self.download_folder + os.sep).rsplit('.', 1)[0] + '(\.(jpg|jpeg|png|gif|bmp))$', re.IGNORECASE)
+        self.filename_thumbnail = next(os.path.join(self.download_folder, f) for f in os.listdir(self.download_folder) if imgPattern.search(f))
+
+
         if hash:
             # insert the 8 last characters of the file hash to the file name to ensure uniqueness
             self.filename = md5sum(unhashed_fname, 8).join('-.').join(unhashed_fname.rsplit('.', 1))
@@ -253,6 +272,8 @@ class StreamPlaylistEntry(BasePlaylistEntry):
         self.title = title
         self.destination = destination
         self.duration = 0
+		# self.url_thumbnail: thumbnail,
+		# 'thumbnail': self.url_thumbnail,
         self.meta = meta
 
         if self.destination:

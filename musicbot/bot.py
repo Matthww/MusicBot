@@ -28,6 +28,7 @@ from collections import defaultdict
 from discord.enums import ChannelType
 from discord.ext.commands.bot import _get_variable
 from discord.http import _func_
+from discord.embeds import Embed
 
 from . import exceptions
 from . import downloader
@@ -653,8 +654,7 @@ class MusicBot(discord.Client):
                 player = await self.deserialize_queue(server, voice_client)
 
                 if player:
-                    log.debug("Created player via deserialization for server %s with %s entries", server.id,
-                              len(player.playlist))
+                    log.debug("Created player via deserialization for server %s with %s entries", server.id, len(player.playlist))
                     # Since deserializing only happens when the bot starts, I should never need to reconnect
                     return self._init_player(player, server=server)
 
@@ -698,11 +698,13 @@ class MusicBot(discord.Client):
         return player
         """
 
+    """
     async def on_player_play(self, player, entry):
         await self.update_now_playing_status(entry)
         player.skip_state.reset()
         channel = entry.meta.get('channel', None)
         author = entry.meta.get('author', None)
+        thumbnail = entry.filename_thumbnail
         totalhypes = player.hype_state.hype_count
         totalhypemsg = 'The previous song got %s Hypes' % (totalhypes)
         if channel:
@@ -727,14 +729,55 @@ class MusicBot(discord.Client):
                     player.voice_client.channel.name, entry.title)
 
             if self.server_specific_data[channel.server]['last_np_msg']:
-                self.server_specific_data[channel.server]['last_np_msg'] = await self.safe_edit_message(last_np_msg,
-                                                                                                        newmsg,
-                                                                                                        send_if_fail=True)
+                # self.server_specific_data[channel.server]['last_np_msg'] = await self.safe_edit_message(last_np_msg, newmsg, send_if_fail=True)
+                self.server_specific_data[channel.server]['last_np_msg'] = await self.safe_edit_message(last_np_msg, newmsg, fp=thumbnail, send_if_fail=True)
+            elif thumbnail and self.config.show_thumbnails:
+                self.server_specific_data[channel.server]['last_np_msg'] = await self.safe_send_file(channel, newmsg, thumbnail)
             else:
                 self.server_specific_data[channel.server]['last_np_msg'] = await self.safe_send_message(channel, newmsg)
 
                 # TODO: Check channel voice state?
+    """
+    # Embed :O
+    async def on_player_play(self, player, entry):
+        await self.update_now_playing(entry)
+        player.skip_state.reset()
 
+        channel = entry.meta.get('channel', None)
+        author = entry.meta.get('author', None)
+
+        if channel and author:
+            last_np_msg = self.server_specific_data[channel.server]['last_np_msg']
+            if last_np_msg and last_np_msg.channel == channel:
+
+                async for lmsg in self.logs_from(channel, limit=1):
+                    if lmsg != last_np_msg and last_np_msg:
+                        await self.safe_delete_message(last_np_msg)
+                        self.server_specific_data[channel.server]['last_np_msg'] = None
+                    break  # This is probably redundant
+            
+            song_progress = str(timedelta(seconds=player.progress)).lstrip('0').lstrip(':')
+            song_total = str(timedelta(seconds=player.current_entry.duration)).lstrip('0').lstrip(':')
+            prog_str = '%s/%s' % (song_progress, song_total)
+
+            if player.current_entry.meta.get('channel', False) and player.current_entry.meta.get('author', False):
+                newmsg = discord.Embed(title=player.current_entry.title, description='Now playing in %s' % player.voice_client.channel.name, colour=0xFF5722, url=player.current_entry.url)
+                newmsg.set_thumbnail(url=player.current_entry.thumbnail)
+                newmsg.add_field(name="Progress", value=prog_str)
+                newmsg.add_field(name="Songs In Queue", value=len(player.playlist.entries))
+                newmsg.set_footer(text="Requested by %s (%s)" % (player.current_entry.meta['author'].display_name, player.current_entry.meta['author']), icon_url=player.current_entry.meta['author'].avatar_url)
+            else:
+                newmsg = discord.Embed(title=player.current_entry.title, colour=0xDEADBF, url=player.current_entry.url)
+                newmsg.set_thumbnail(url=player.current_entry.thumbnail)
+                newmsg.add_field(name="Progress", value=prog_str)
+                newmsg.add_field(name="Songs In Queue", value=len(player.playlist.entries))
+
+            if self.server_specific_data[channel.server]['last_np_msg']:
+                self.server_specific_data[channel.server]['last_np_msg'] = await self.safe_edit_message(last_np_msg, embed=newmsg, send_if_fail=True)
+            else:
+                self.server_specific_data[channel.server]['last_np_msg'] = await self.safe_send_message(channel, embed=newmsg)
+    #Embeds :O
+	
     async def on_player_resume(self, player, entry, **_):
         await self.update_now_playing_status(entry)
 
@@ -1000,6 +1043,28 @@ class MusicBot(discord.Client):
 
         return msg
 
+    async def safe_send_file(self, dest, content, fp, *, tts=False, expire_in=0, also_delete=None, quiet=False, filename=None):
+        msg = None
+        try:
+            msg = await self.send_file(dest, fp, content=content, tts=tts)
+
+            if msg and expire_in:
+                asyncio.ensure_future(self._wait_delete_msg(msg, expire_in))
+
+            if also_delete and isinstance(also_delete, discord.Message):
+                asyncio.ensure_future(self._wait_delete_msg(also_delete, expire_in))
+
+        except discord.Forbidden:
+            if not quiet:
+                self.safe_print("Warning: Cannot send message or file to %s, no permission" % dest.name)
+
+        except discord.NotFound:
+            if not quiet:
+                self.safe_print("Warning: Cannot send message or file to %s, invalid channel?" % dest.name)
+
+        return msg
+		
+		
     async def safe_delete_message(self, message, *, quiet=False):
         lfunc = log.debug if quiet else log.warning
 
@@ -1012,7 +1077,7 @@ class MusicBot(discord.Client):
         except discord.NotFound:
             lfunc("Cannot delete message \"{}\", message not found".format(message.clean_content))
 
-    async def safe_edit_message(self, message, new, *, send_if_fail=False, quiet=False):
+    async def safe_edit_message(self, message, new, *, fp=None, send_if_fail=False, quiet=False):
         lfunc = log.debug if quiet else log.warning
 
         try:
@@ -1022,7 +1087,10 @@ class MusicBot(discord.Client):
             lfunc("Cannot edit message \"{}\", message not found".format(message.clean_content))
             if send_if_fail:
                 lfunc("Sending message instead")
-                return await self.safe_send_message(message.channel, new)
+                if fp and self.config.show_thumbnails:
+                    return await self.safe_send_file(message.channel, new, fp)
+                else:
+                    return await self.safe_send_message(message.channel, new)
 
     async def send_typing(self, destination):
         try:
@@ -1261,26 +1329,55 @@ class MusicBot(discord.Client):
                     "```\n{}```".format(
                         dedent(cmd.__doc__)
                     ).format(command_prefix=self.config.command_prefix),
-                    delete_after=20
+                    delete_after=30
                 )
             else:
-                return Response("No such command", delete_after=10)
+                return Response("No such command", delete_after=15)
 
         else:
-            helpmsg = "**Available commands**\n```"
+            helpmsg = "**Available commands**\n\n  `*help [command]` ```\n"
             commands = []
+            #commands.append("*help [command]")
 
             for att in dir(self):
                 if att.startswith('cmd_') and att != 'cmd_help' and not hasattr(getattr(self, att), 'dev_cmd'):
                     command_name = att.replace('cmd_', '').lower()
+					# custom additions
+                    """
+                    if(command_name == "play"):
+                        command_name = "play <song link>\n!play <song text to search for>"
+                    elif(command_name == "search"):
+                        command_name = "search [service] [number] <query>"
+                    elif(command_name == "blacklist"):
+                        command_name = "blacklist <status> <@user1>..."
+                    elif(command_name == "pldump"):
+                        command_name = "pldump <playlist>"
+                    elif(command_name == "setavatar"):
+                        command_name = "setavatar [url]"
+                    elif(command_name == "setnick"):
+                        command_name = "setnick <nick>"
+                    elif(command_name == "clean"):
+                        command_name = "clean <amount>"
+                    elif(command_name == "volume"):
+                        command_name = "volume <+amount> or <-amount>"
+                    elif(command_name == "help"):
+                        command_name = "help [command]"
+                    elif(command_name == "joinserver"):
+                        command_name = "joinserver <server invite link>"
+                    elif(command_name == "setname"):
+                        command_name = "setname <name>"
+                    elif(command_name == "id"):
+                        command_name = "id [@user]>"
+                    """
                     commands.append("{}{}".format(self.config.command_prefix, command_name))
 
+					
             helpmsg += ", ".join(commands)
             helpmsg += "```\n"
-            helpmsg += "You can also use `{}help x` for more info about each command." \
+            helpmsg += "You can also use `{}help [command]` for more information about each command." \
                        "\n\n*This bot is hosted by Matthww#5032!*".format(self.config.command_prefix)
 
-            return Response(helpmsg, reply=True, delete_after=20)
+            return Response(helpmsg, reply=True, delete_after=30)
 
     async def cmd_blacklist(self, message, user_mentions, option, something):
         """
@@ -1875,6 +1972,7 @@ class MusicBot(discord.Client):
                 progress=song_progress, total=song_total
             )
             prog_bar_str = ''
+            thumbnail = player.current_entry.filename_thumbnail
 
             # percentage shows how much of the current song has already been played
             percentage = 0.0
@@ -1913,7 +2011,10 @@ class MusicBot(discord.Client):
                     url = player.current_entry.url
                 )
 
-            self.server_specific_data[server]['last_np_msg'] = await self.safe_send_message(channel, np_text)
+            if thumbnail and self.config.show_thumbnails:
+                self.server_specific_data[server]['last_np_msg'] = await self.safe_send_file(channel, np_text, thumbnail)
+            else:
+                self.server_specific_data[server]['last_np_msg'] = await self.safe_send_message(channel, np_text)
             await self._manual_delete_check(message)
         else:
             return Response(
@@ -2231,6 +2332,7 @@ class MusicBot(discord.Client):
             song_progress = ftimedelta(timedelta(seconds=player.progress))
             song_total = ftimedelta(timedelta(seconds=player.current_entry.duration))
             prog_str = '`[%s/%s]`' % (song_progress, song_total)
+            thumbnail = player.current_entry.filename_thumbnail
 
             if player.current_entry.meta.get('channel', False) and player.current_entry.meta.get('author', False):
                 lines.append("Now Playing:\n\n:notes:  **%s** added by **%s** %s\n" % (
@@ -2512,8 +2614,10 @@ class MusicBot(discord.Client):
 
         if message.attachments:
             thing = message.attachments[0]['url']
-        else:
+        elif url:
             thing = url.strip('<>')
+        else:
+            raise exceptions.CommandError("Unable to change avatar! Please upload an image or provide a link to one.", expire_in=20)
 
         try:
             with aiohttp.Timeout(10):
@@ -3021,7 +3125,6 @@ class MusicBot(discord.Client):
             else:
                 return Response("%s here is a :pizza: for you from %s \nWait that is not right! \nTell gfrew to fix me!" % (usr.mention, author.name), reply=False, delete_after=30)
 
-
     """END Custom COMMANDS!!"""
     """END Custom COMMANDS!!"""
     """END Custom COMMANDS!!"""
@@ -3209,82 +3312,49 @@ class MusicBot(discord.Client):
                 await self.safe_delete_message(message, quiet=True)
 
     async def on_voice_state_update(self, before, after):
-        if not self.init_ok:
-            return  # Ignore stuff before ready
-
-        state = VoiceStateUpdate(before, after)
-
-        if state.broken:
-            log.voicedebug("Broken voice state update")
+        if not all([before, after]):
             return
 
-        if state.resuming:
-            log.debug("Resumed voice connection to {0.server.name}/{0.name}".format(state.voice_channel))
+        if before.voice_channel == after.voice_channel:
+            return
 
-        if not state.changes:
-            log.voicedebug("Empty voice state update, likely a session id change")
-            return  # Session id change, pointless event
+        if before.server.id not in self.players:
+            return
 
-        ################################
+        my_voice_channel = after.server.me.voice_channel  # This should always work, right?
 
-        log.voicedebug("Voice state update for {mem.id}/{mem!s} on {ser.name}/{vch.name} -> {dif}".format(
-            mem=state.member,
-            ser=state.server,
-            vch=state.voice_channel,
-            dif=state.changes
-        ))
+        if not my_voice_channel:
+            return
 
-        if not state.is_about_my_voice_channel:
-            return  # Irrelevant channel
+        if before.voice_channel == my_voice_channel:
+            joining = False
+        elif after.voice_channel == my_voice_channel:
+            joining = True
+        else:
+            return  # Not my channel
 
-        if state.joining or state.leaving:
-            log.info("{0.id}/{0!s} has {1} {2}/{3}".format(
-                state.member,
-                'joined' if state.joining else 'left',
-                state.server,
-                state.my_voice_channel
-            ))
+        moving = before == before.server.me
+
+        auto_paused = self.server_specific_data[after.server]['auto_paused']
+        player = await self.get_player(my_voice_channel)
+
+        if after == after.server.me and after.voice_channel:
+            player.voice_client.channel = after.voice_channel
 
         if not self.config.auto_pause:
             return
 
-        autopause_msg = "{state} in {channel.server.name}/{channel.name} {reason}"
+        if sum(1 for m in my_voice_channel.voice_members if m != after.server.me):
+            if auto_paused and player.is_paused:
+                print("[config:autopause] Unpausing")
+                self.server_specific_data[after.server]['auto_paused'] = False
+                player.resume()
+        else:
+            if not auto_paused and player.is_playing:
+                print("[config:autopause] Pausing")
+                self.server_specific_data[after.server]['auto_paused'] = True
+                player.pause()
 
-        auto_paused = self.server_specific_data[after.server]['auto_paused']
-        player = await self.get_player(state.my_voice_channel)
-
-        if state.joining and state.empty() and player.is_playing:
-            log.info(autopause_msg.format(
-                state="Pausing",
-                channel=state.my_voice_channel,
-                reason="(joining empty channel)"
-            ).strip())
-
-            self.server_specific_data[after.server]['auto_paused'] = True
-            player.pause()
-            return
-
-        if not state.is_about_me:
-            if not state.empty(old_channel=state.leaving):
-                if auto_paused and player.is_paused:
-                    log.info(autopause_msg.format(
-                        state="Unpausing",
-                        channel=state.my_voice_channel,
-                        reason=""
-                    ).strip())
-
-                    self.server_specific_data[after.server]['auto_paused'] = False
-                    player.resume()
-            else:
-                if not auto_paused and player.is_playing:
-                    log.info(autopause_msg.format(
-                        state="Pausing",
-                        channel=state.my_voice_channel,
-                        reason="(empty channel)"
-                    ).strip())
-
-                    self.server_specific_data[after.server]['auto_paused'] = True
-                    player.pause()
 
     async def on_server_update(self, before: discord.Server, after: discord.Server):
         if before.region != after.region:

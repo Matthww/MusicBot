@@ -63,6 +63,7 @@ class Config:
         self.debug_mode = False
 
         self.playing_status = config.getboolean('Modification', 'PlayingStatus', fallback=ConfigDefaults.playing_status)
+        self.show_thumbnails = config.getboolean('MusicBot', 'ShowThumbnails', fallback=ConfigDefaults.show_thumbnails)
 
         self.blacklist_file = config.get('Files', 'BlacklistFile', fallback=ConfigDefaults.blacklist_file)
         self.auto_playlist_file = config.get('Files', 'AutoPlaylistFile', fallback=ConfigDefaults.auto_playlist_file)
@@ -284,6 +285,7 @@ class ConfigDefaults:
     debug_level = 'INFO'
 
     playing_status = True
+    show_thumbnails = True
 
     options_file = 'config/options.ini'
     blacklist_file = 'config/blacklist.txt'
