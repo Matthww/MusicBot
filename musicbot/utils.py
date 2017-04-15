@@ -2,6 +2,7 @@ import sys
 # import decimal
 import logging
 import aiohttp
+from random import shuffle
 
 from hashlib import md5
 from .constants import DISCORD_MSG_CHAR_LIMIT
@@ -153,3 +154,18 @@ def objdiff(obj1, obj2, *, access_attr=None, depth=0):
 
 def color_supported():
     return hasattr(sys.stderr, "isatty") and sys.stderr.isatty()
+
+def illegal_char(string, chars):
+    illegal = re.compile(chars)
+    if illegal.search(string):
+        return True
+    else:
+        return False
+		
+def uniquerandomlist(listname):
+    l = []
+    while True:
+        if len(l) == 0:
+            l = listname[:]
+            shuffle(l)
+        yield l.pop()

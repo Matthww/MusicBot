@@ -8,6 +8,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 log = logging.getLogger(__name__)
 
+"""
 ytdl_format_options = {
     'format': 'bestaudio/best',
     'outtmpl': '%(extractor)s-%(id)s-%(title)s.%(ext)s',
@@ -23,6 +24,27 @@ ytdl_format_options = {
     'nooverwrites': True,
     'writethumbnail': True
 }
+"""
+ytdl_format_options = {
+    'hlspreferffmpeg': True,
+    'preferffmpeg': True,
+    'recodevideo': 'mp4',
+    'format': 'best',
+    'extractaudio': True,
+    'audioformat': 'opus',
+    'audioquality': '0',
+    'outtmpl': '%(extractor)s-%(id)s-%(title)s.%(ext)s',
+    'restrictfilenames': True,
+    'noplaylist': True,
+    'nocheckcertificate': True,
+    'ignoreerrors': False,
+    'logtostderr': False,
+    'quiet': True,
+    'no_warnings': True,
+    'default_search': 'auto',
+    'source_address': '0.0.0.0',
+	'writethumbnail': True
+}
 
 # Fuck your useless bugreports message that gets two link embeds and confuses users
 youtube_dl.utils.bug_reports_message = lambda: ''
@@ -37,7 +59,7 @@ youtube_dl.utils.bug_reports_message = lambda: ''
 
 class Downloader:
     def __init__(self, download_folder=None):
-        self.thread_pool = ThreadPoolExecutor(max_workers=2)
+        self.thread_pool = ThreadPoolExecutor(max_workers=4)
         self.unsafe_ytdl = youtube_dl.YoutubeDL(ytdl_format_options)
         self.safe_ytdl = youtube_dl.YoutubeDL(ytdl_format_options)
         self.safe_ytdl.params['ignoreerrors'] = True

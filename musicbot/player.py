@@ -13,7 +13,7 @@ from collections import deque
 from shutil import get_terminal_size
 from websockets.exceptions import InvalidState
 
-from discord.http import _func_
+# from discord.http import _func_
 
 from .utils import avg
 from .lib.event_emitter import EventEmitter
@@ -22,6 +22,9 @@ from .exceptions import FFmpegError, FFmpegWarning
 
 log = logging.getLogger(__name__)
 
+def _func_():
+    # emulate __func__ from C++
+    return inspect.currentframe().f_back.f_code.co_name
 
 class PatchedBuff:
     """
@@ -264,7 +267,7 @@ class MusicPlayer(EventEmitter, Serializable):
                 self._kill_current_player()
 
                 boptions = "-nostdin"
-                aoptions = "-vn -b:a 192k"
+                aoptions = "-vn -b:a 128k"
                 # aoptions = "-vn"
 
                 log.ffmpeg("Creating player with options: {} {} {}".format(boptions, aoptions, entry.filename))
