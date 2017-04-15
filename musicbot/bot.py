@@ -2786,27 +2786,6 @@ class MusicBot(discord.Client):
         player.playlist.remove_last()
         return Response(':put_litter_in_its_place: last track removed', delete_after=10)
 
-    async def cmd_loop(self, player, author, channel):
-        await self.send_message(channel, "-say !loop")
-        await self.send_message(channel, "-say !loop2")
-        await self.send_message(channel, "-ping")
-        await self.send_message(channel, "!help")
-        await self.send_message(channel, "-help")
-        await self.send_message(channel, "!say Loop holes are nice!")
-        await self.send_message(channel, "@Ulti#8410 Loop holes are nice!")
-		
-    async def cmd_loop2(self, player, author, channel):
-        await self.send_message(channel, "-say !loop")
-        await self.send_message(channel, "-say !loop2")
-        await self.send_message(channel, "-ping")
-        await self.send_message(channel, "-ping")
-        await self.send_message(channel, "-ping")
-        await self.send_message(channel, "!help")
-        await self.send_message(channel, "-help")
-        await self.send_message(channel, "@Ulti#8410 Loop holes are nice!")
-        await self.send_message(channel, "Loop holes are nice!")
-        await self.send_message(channel, "-ping")
-
     async def cmd_addnp(self, player, channel, server, message):
         """
         Usage:
