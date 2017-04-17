@@ -1,8 +1,8 @@
 import sys
-# import decimal
 import logging
 import aiohttp
 from random import shuffle
+import re
 
 from hashlib import md5
 from .constants import DISCORD_MSG_CHAR_LIMIT
@@ -37,6 +37,7 @@ def write_file(filename, contents):
 def sane_round_int(x):
     return int(decimal.Decimal(x).quantize(1, rounding=decimal.ROUND_HALF_UP))
 """
+
 
 def paginate(content, *, length=DISCORD_MSG_CHAR_LIMIT, reserve=0):
     """

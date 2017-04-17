@@ -7,6 +7,7 @@ from discord.ext.commands.bot import _get_variable
 
 from .exceptions import HelpfulError
 
+
 class Yikes:
     def find_module(self, fullname, path=None):
         if fullname == 'requests':
