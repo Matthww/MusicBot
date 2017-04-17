@@ -5,6 +5,7 @@ import logging
 import asyncio
 import audioop
 import subprocess
+import inspect
 
 from enum import Enum
 from array import array

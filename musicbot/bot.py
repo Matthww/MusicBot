@@ -1417,29 +1417,6 @@ class MusicBot(discord.Client):
             usr = user_mentions[0]
             return Response('Your ID: `%s`' % author.id, reply=True, delete_after=10)
 
-    @owner_only
-    async def cmd_joinserver(self, message, server_link=None):
-        """
-        Usage:
-            {command_prefix}joinserver invite_link
-
-        Asks the bot to join a server.  Note: Bot accounts cannot use invite links.
-        """
-
-        if self.user.bot:
-            url = await self.generate_invite_link()
-            return Response(
-                "Bot accounts can't use invite links!  Click here to add me to a server: \n{}".format(url),
-                reply=True, delete_after=10)
-
-        try:
-            if server_link:
-                await self.accept_invite(server_link)
-                return Response("\N{THUMBS UP SIGN}")
-
-        except:
-            raise exceptions.CommandError('Invalid URL provided: {}\n'.format(server_link), expire_in=10)
-
     async def cmd_play(self, player, channel, author, permissions, leftover_args, song_url):
         """
         Usage:
@@ -1876,7 +1853,7 @@ class MusicBot(discord.Client):
             return Response(":no_entry_sign: No videos found!", delete_after=10)
 
         def check(m):
-            if m.content.lower().strip() in ["exit", "cancel", "c", "e"]:  # Valid if the user wants to abot
+            if m.content.lower().strip() in ["exit", "cancel", "e", "c"]:  # Valid if the user wants to abot
                 return True
 
             try:
@@ -2316,8 +2293,9 @@ class MusicBot(discord.Client):
         andmoretext = '* ... and %s more*' % ('x' * len(player.playlist.entries))
 
         if player.current_entry:
-            song_progress = str(timedelta(seconds=player.progress)).lstrip('0').lstrip(':')
-            song_total = str(timedelta(seconds=player.current_entry.duration)).lstrip('0').lstrip(':')
+            # TODO: Fix timedelta garbage with util function
+            song_progress = ftimedelta(timedelta(seconds=player.progress))
+            song_total = ftimedelta(timedelta(seconds=player.current_entry.duration))
             prog_str = '`[%s/%s]`' % (song_progress, song_total)
 
             if player.current_entry.meta.get('channel', False) and player.current_entry.meta.get('author', False):
@@ -2327,36 +2305,10 @@ class MusicBot(discord.Client):
                 lines.append("Now Playing:\n:notes:  **%s** %s\n" % (player.current_entry.title, prog_str))
 
         for i, item in enumerate(player.playlist, 1):
-            """
-            # XFLARE
-            if i == 1:
-                pos = ":one:"
-            elif i == 2:
-                pos = ':two:'
-            elif i == 3:
-                pos = ':three:'
-            elif i == 4:
-                pos = ':four:'
-            elif i == 5:
-                pos = ':five:'
-            elif i == 6:
-                pos = ':six:'
-            elif i == 7:
-                pos = ':seven:'
-            elif i == 8:
-                pos = ':eight:'
-            elif i == 9:
-                pos = ':nine:'
-            elif i == 10:
-                pos = ':keycap_ten:'
-            # elif i > 10: break
-            """
-
             if item.meta.get('channel', False) and item.meta.get('author', False):
-                nextline = '{} **{}**\n  added by {}'.format(pos, item.title, item.meta['author'].name).strip()
                 nextline = '`{}.` **{}** added by **{}**'.format(i, item.title, item.meta['author'].name).strip()
             else:
-                nextline = '{} **{}**'.format(pos, item.title).strip()
+                nextline = '`{}.` **{}**'.format(i, item.title).strip()
 
             currentlinesum = sum(len(x) + 1 for x in lines)  # +1 is for newline char
 
@@ -2365,7 +2317,6 @@ class MusicBot(discord.Client):
                     unlisted += 1
                     continue
 
-            # return Response(nextline)
             lines.append(nextline)
 
         if unlisted:
@@ -2373,7 +2324,7 @@ class MusicBot(discord.Client):
 
         if not lines:
             lines.append(
-                'There are no songs queued... Queue something!.'.format(self.config.command_prefix))
+                'There are no songs queued! Queue something with {}play.'.format(self.config.command_prefix))
 
         message = '\n'.join(lines)
         return Response(message, delete_after=20)
@@ -3371,9 +3322,7 @@ class MusicBot(discord.Client):
             return
 
         if message.channel.is_private:
-            if not (
-                                message.author.id == self.config.owner_id and command == 'joinserver'
-                    or message.author.id == self.config.owner_id):
+            if not message.author.id == self.config.owner_id and message.author.id == self.config.owner_id:
                 await self.send_message(message.channel, 'You cannot use this bot in private messages.')
                 return
 
