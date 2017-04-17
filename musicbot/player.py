@@ -23,9 +23,11 @@ from .utils import format_time_ffmpeg
 
 log = logging.getLogger(__name__)
 
+
 def _func_():
     # emulate __func__ from C++
     return inspect.currentframe().f_back.f_code.co_name
+
 
 class PatchedBuff:
     """
@@ -44,7 +46,7 @@ class PatchedBuff:
 
     def __del__(self):
         if self.draw:
-            print(' ' * (get_terminal_size().columns-1), end='\r')
+            print(' ' * (get_terminal_size().columns - 1), end='\r')
 
     def read(self, frame_size):
         self.frame_count += 1
@@ -91,9 +93,9 @@ class PatchedBuff:
 class MusicPlayerState(Enum):
     STOPPED = 0  # When the player isn't playing anything
     PLAYING = 1  # The player is actively playing music.
-    PAUSED = 2   # The player is paused on a song.
+    PAUSED = 2  # The player is paused on a song.
     WAITING = 3  # The player has finished its song but is still downloading the next one
-    DEAD = 4     # The player has been killed.
+    DEAD = 4  # The player has been killed.
 
     def __str__(self):
         return self.name
@@ -313,7 +315,7 @@ class MusicPlayer(EventEmitter, Serializable):
                 self._current_player.start()
 
                 self.emit('play', player=self, entry=entry)
-				
+
     def play_entry(self, entry):
         self.loop.create_task(self._play_entry(entry))
 
@@ -323,26 +325,26 @@ class MusicPlayer(EventEmitter, Serializable):
         """
 
         with await self._play_lock:
-                # In-case there was a player, kill it. RIP.
-                self.deliberately_killed = True
-                self._kill_current_player()
+            # In-case there was a player, kill it. RIP.
+            self.deliberately_killed = True
+            self._kill_current_player()
 
-                self._current_player = self._monkeypatch_player(self.voice_client.create_ffmpeg_player(
-                    entry.filename,
-                    before_options="-nostdin -ss {}".format(format_time_ffmpeg(int(entry.start_seconds))),
-                    options="-vn -b:a 128k",
-                    # Threadsafe call soon, b/c after will be called from the voice playback thread.
-                    after=lambda: self.loop.call_soon_threadsafe(self._playback_finished)
-                ))
-                self._current_player.setDaemon(True)
-                self._current_player.buff.volume = self.volume
+            self._current_player = self._monkeypatch_player(self.voice_client.create_ffmpeg_player(
+                entry.filename,
+                before_options="-nostdin -ss {}".format(format_time_ffmpeg(int(entry.start_seconds))),
+                options="-vn -b:a 128k",
+                # Threadsafe call soon, b/c after will be called from the voice playback thread.
+                after=lambda: self.loop.call_soon_threadsafe(self._playback_finished)
+            ))
+            self._current_player.setDaemon(True)
+            self._current_player.buff.volume = self.volume
 
-                # I need to add ytdl hooks
-                self.state = MusicPlayerState.PLAYING
-                self._current_entry = entry
+            # I need to add ytdl hooks
+            self.state = MusicPlayerState.PLAYING
+            self._current_entry = entry
 
-                self._current_player.start()
-                self.emit('play', player=self, entry=entry)
+            self._current_player.start()
+            self.emit('play', player=self, entry=entry)
 
     def _monkeypatch_player(self, player):
         original_buff = player.buff
@@ -401,7 +403,8 @@ class MusicPlayer(EventEmitter, Serializable):
             # TODO: progress stuff
             # how do I even do this
             # this would have to be in the entry class right?
-            # some sort of progress indicator to skip ahead with ffmpeg (however that works, reading and ignoring frames?)
+            # some sort of progress indicator to skip ahead with ffmpeg
+            # (however that works, reading and ignoring frames?)
 
         return player
 
@@ -411,7 +414,6 @@ class MusicPlayer(EventEmitter, Serializable):
             return json.loads(raw_json, object_hook=Serializer.deserialize)
         except:
             log.exception("Failed to deserialize player")
-
 
     @property
     def current_entry(self):
@@ -436,15 +438,17 @@ class MusicPlayer(EventEmitter, Serializable):
     @property
     def progress(self):
         if self._current_player:
-            return round(self._current_player.buff.frame_count * 0.02) + (self.current_entry.start_seconds if self.current_entry is not None else 0)
+            return round(self._current_player.buff.frame_count * 0.02) + (
+                self.current_entry.start_seconds if self.current_entry is not None else 0)
             # TODO: Properly implement this
             #       Correct calculation should be bytes_read/192k
             #       192k AKA sampleRate * (bitDepth / 8) * channelCount
             #       Change frame_count to bytes_read in the PatchedBuff
 
+
 # TODO: I need to add a check for if the eventloop is closed
 
-def filter_stderr(popen:subprocess.Popen, future:asyncio.Future):
+def filter_stderr(popen: subprocess.Popen, future: asyncio.Future):
     last_ex = None
 
     while True:
@@ -461,7 +465,7 @@ def filter_stderr(popen:subprocess.Popen, future:asyncio.Future):
                 last_ex = e
 
             except FFmpegWarning:
-                pass # useless message
+                pass  # useless message
         else:
             break
 
@@ -470,12 +474,13 @@ def filter_stderr(popen:subprocess.Popen, future:asyncio.Future):
     else:
         future.set_result(True)
 
-def check_stderr(data:bytes):
+
+def check_stderr(data: bytes):
     try:
         data = data.decode('utf8')
     except:
         log.ffmpeg("Unknown error decoding message from ffmpeg", exc_info=True)
-        return True # fuck it
+        return True  # fuck it
 
     # log.ffmpeg("Decoded data from ffmpeg: {}".format(data))
 
@@ -490,7 +495,7 @@ def check_stderr(data:bytes):
         "decode_band_types: Input buffer exhausted before END element found"
     ]
     errors = [
-        "Invalid data found when processing input", # need to regex this properly, its both a warning and an error
+        "Invalid data found when processing input",  # need to regex this properly, its both a warning and an error
     ]
 
     if any(msg in data for msg in warnings):
@@ -500,7 +505,6 @@ def check_stderr(data:bytes):
         raise FFmpegError(data)
 
     return True
-
 
 # if redistributing ffmpeg is an issue, it can be downloaded from here:
 #  - http://ffmpeg.zeranoe.com/builds/win32/static/ffmpeg-latest-win32-static.7z

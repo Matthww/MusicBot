@@ -33,6 +33,7 @@ def write_file(filename, contents):
             f.write(str(item))
             f.write('\n')
 
+
 """
 def sane_round_int(x):
     return int(decimal.Decimal(x).quantize(1, rounding=decimal.ROUND_HALF_UP))
@@ -94,7 +95,8 @@ def ftimedelta(td):
 
 def safe_print(content, *, end='\n', flush=True):
     sys.stdout.buffer.write((content + end).encode('utf-8', 'replace'))
-    if flush: sys.stdout.flush()
+    if flush:
+        sys.stdout.flush()
 
 
 def avg(i):
@@ -153,8 +155,10 @@ def objdiff(obj1, obj2, *, access_attr=None, depth=0):
 
     return changes
 
+
 def color_supported():
     return hasattr(sys.stderr, "isatty") and sys.stderr.isatty()
+
 
 def illegal_char(string, chars):
     illegal = re.compile(chars)
@@ -162,7 +166,8 @@ def illegal_char(string, chars):
         return True
     else:
         return False
-		
+
+
 def uniquerandomlist(listname):
     l = []
     while True:
@@ -170,6 +175,7 @@ def uniquerandomlist(listname):
             l = listname[:]
             shuffle(l)
         yield l.pop()
+
 
 def format_time_ffmpeg(s):
     total_msec = s * 1000

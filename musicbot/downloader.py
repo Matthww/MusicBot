@@ -43,7 +43,7 @@ ytdl_format_options = {
     'no_warnings': True,
     'default_search': 'auto',
     'source_address': '0.0.0.0',
-	'writethumbnail': True
+    'writethumbnail': True
 }
 
 # Fuck your useless bugreports message that gets two link embeds and confuses users
@@ -56,6 +56,7 @@ youtube_dl.utils.bug_reports_message = lambda: ''
     that's bad.  So I need multiple ytdl objects.
 
 '''
+
 
 class Downloader:
     def __init__(self, download_folder=None):
@@ -73,7 +74,6 @@ class Downloader:
             otmpl = self.safe_ytdl.params['outtmpl']
             self.safe_ytdl.params['outtmpl'] = os.path.join(download_folder, otmpl)
 
-
     @property
     def ytdl(self):
         return self.safe_ytdl
@@ -86,7 +86,8 @@ class Downloader:
         """
         if callable(on_error):
             try:
-                return await loop.run_in_executor(self.thread_pool, functools.partial(self.unsafe_ytdl.extract_info, *args, **kwargs))
+                return await loop.run_in_executor(self.thread_pool,
+                                                  functools.partial(self.unsafe_ytdl.extract_info, *args, **kwargs))
 
             except Exception as e:
 
@@ -104,7 +105,9 @@ class Downloader:
                 if retry_on_error:
                     return await self.safe_extract_info(loop, *args, **kwargs)
         else:
-            return await loop.run_in_executor(self.thread_pool, functools.partial(self.unsafe_ytdl.extract_info, *args, **kwargs))
+            return await loop.run_in_executor(self.thread_pool,
+                                              functools.partial(self.unsafe_ytdl.extract_info, *args, **kwargs))
 
     async def safe_extract_info(self, loop, *args, **kwargs):
-        return await loop.run_in_executor(self.thread_pool, functools.partial(self.safe_ytdl.extract_info, *args, **kwargs))
+        return await loop.run_in_executor(self.thread_pool,
+                                          functools.partial(self.safe_ytdl.extract_info, *args, **kwargs))

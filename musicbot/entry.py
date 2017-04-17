@@ -43,7 +43,8 @@ class BasePlaylistEntry(Serializable):
 
     def get_ready_future(self):
         """
-        Returns a future that will fire when the song is ready to be played. The future will either fire with the result (being the entry) or an exception
+        Returns a future that will fire when the song is ready to be played.
+        The future will either fire with the result (being the entry) or an exception
         as to why the song download failed.
         """
         future = asyncio.Future()
@@ -95,7 +96,7 @@ class URLPlaylistEntry(BasePlaylistEntry):
         self.meta = meta
 
         self.download_folder = self.playlist.downloader.download_folder
-		
+
     def set_start(self, sec):
         if sec > self.duration or sec < 0:
             return False
@@ -109,11 +110,11 @@ class URLPlaylistEntry(BasePlaylistEntry):
             'url': self.url,
             'title': self.title,
             'duration': self.duration,
-			# 'thumbnail': self.url_thumbnail,
+            # 'thumbnail': self.url_thumbnail,
             'downloaded': self.is_downloaded,
             'expected_filename': self.expected_filename,
             'filename': self.filename,
-			'filename_thumbnail': self.filename_thumbnail,
+            'filename_thumbnail': self.filename_thumbnail,
             'full_filename': os.path.abspath(self.filename) if self.filename else self.filename,
             'meta': {
                 name: {
@@ -121,7 +122,7 @@ class URLPlaylistEntry(BasePlaylistEntry):
                     'id': obj.id,
                     'name': obj.name
                 } for name, obj in self.meta.items() if obj
-            }
+                }
         })
 
     @classmethod
@@ -256,9 +257,11 @@ class URLPlaylistEntry(BasePlaylistEntry):
         self.filename = unhashed_fname = self.playlist.downloader.ytdl.prepare_filename(result)
 
         # Search for file name with an image suffix
-        imgPattern = re.compile(self.filename.lstrip(self.download_folder + os.sep).rsplit('.', 1)[0] + '(\.(jpg|jpeg|png|gif|bmp))$', re.IGNORECASE)
-        self.filename_thumbnail = next(os.path.join(self.download_folder, f) for f in os.listdir(self.download_folder) if imgPattern.search(f))
-
+        imgPattern = re.compile(
+            self.filename.lstrip(self.download_folder + os.sep).rsplit('.', 1)[0] + '(\.(jpg|jpeg|png|gif|bmp))$',
+            re.IGNORECASE)
+        self.filename_thumbnail = next(
+            os.path.join(self.download_folder, f) for f in os.listdir(self.download_folder) if imgPattern.search(f))
 
         if hash:
             # insert the 8 last characters of the file hash to the file name to ensure uniqueness
@@ -281,8 +284,8 @@ class StreamPlaylistEntry(BasePlaylistEntry):
         self.title = title
         self.destination = destination
         self.duration = 0
-		# self.url_thumbnail: thumbnail,
-		# 'thumbnail': self.url_thumbnail,
+        # self.url_thumbnail: thumbnail,
+        # 'thumbnail': self.url_thumbnail,
         self.meta = meta
 
         if self.destination:
@@ -302,7 +305,7 @@ class StreamPlaylistEntry(BasePlaylistEntry):
                     'id': obj.id,
                     'name': obj.name
                 } for name, obj in self.meta.items() if obj
-            }
+                }
         })
 
     @classmethod

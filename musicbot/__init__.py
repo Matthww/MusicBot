@@ -70,6 +70,7 @@ class Yikes:
             footnote="Import traceback (most recent call last):\n" + import_tb
         )
 
+
 sys.meta_path.insert(0, Yikes())
 
 from .bot import MusicBot
@@ -83,7 +84,8 @@ _func_prototype = "def {logger_func_name}(self, message, *args, **kwargs):\n" \
                   "    if self.isEnabledFor({levelname}):\n" \
                   "        self._log({levelname}, message, args, **kwargs)"
 
-def _add_logger_level(levelname, level, *, func_name = None):
+
+def _add_logger_level(levelname, level, *, func_name=None):
     """
 
     :type levelname: str

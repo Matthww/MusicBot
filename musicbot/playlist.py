@@ -62,7 +62,7 @@ class Playlist(EventEmitter, Serializable):
             self.entries.appendleft(entry)
 
         return removed_entry
- 		
+
     async def add_entry(self, song_url, **meta):
         """
             Validates and adds a song_url to be played. This does not start the download of the song.
@@ -83,7 +83,8 @@ class Playlist(EventEmitter, Serializable):
 
         # TODO: Sort out what happens next when this happens
         if info.get('_type', None) == 'playlist':
-            raise WrongEntryTypeError("This is a playlist.", True, info.get('webpage_url', None) or info.get('url', None))
+            raise WrongEntryTypeError("This is a playlist.", True,
+                                      info.get('webpage_url', None) or info.get('url', None))
 
         if info.get('is_live', False):
             return await self.add_stream_entry(song_url, info=info, **meta)
@@ -107,7 +108,7 @@ class Playlist(EventEmitter, Serializable):
 
                 elif content_type.startswith('text/html'):
                     log.warning("Got text/html for content-type, this might be a stream")
-                    pass # TODO: Check for shoutcast/icecast
+                    pass  # TODO: Check for shoutcast/icecast
 
                 elif not content_type.startswith(('audio/', 'video/')):
                     log.warning("Questionable content-type \"{}\" for url {}".format(content_type, song_url))
@@ -117,7 +118,7 @@ class Playlist(EventEmitter, Serializable):
             song_url,
             info.get('title', 'Untitled'),
             info.get('duration', 0) or 0,
-			# info.get('thumbnail') or None,
+            # info.get('thumbnail') or None,
             self.downloader.ytdl.prepare_filename(info),
             **meta
         )
@@ -133,11 +134,11 @@ class Playlist(EventEmitter, Serializable):
         if len(newqueue) == len(self.entries):
             hasrun = False
         else:
-            hasrun = True    
-        
-        if hasrun:            
+            hasrun = True
+
+        if hasrun:
             self.entries = deque(newqueue)
-            
+
         return hasrun
 
     async def add_stream_entry(self, song_url, info=None, **meta):
@@ -148,14 +149,14 @@ class Playlist(EventEmitter, Serializable):
                 info = await self.downloader.extract_info(self.loop, song_url, download=False)
 
             except DownloadError as e:
-                if e.exc_info[0] == UnsupportedError: # ytdl doesn't like it but its probably a stream
+                if e.exc_info[0] == UnsupportedError:  # ytdl doesn't like it but its probably a stream
                     log.debug("Assuming content is a direct stream")
 
                 elif e.exc_info[0] == URLError:
                     if os.path.exists(os.path.abspath(song_url)):
                         raise ExtractionError("This is not a stream, this is a file path.")
 
-                    else: # it might be a file path that just doesn't exist
+                    else:  # it might be a file path that just doesn't exist
                         raise ExtractionError("Invalid input: {0.exc_info[0]}: {0.exc_info[1].reason}".format(e))
 
                 else:
@@ -163,13 +164,14 @@ class Playlist(EventEmitter, Serializable):
                     raise ExtractionError("Unknown error: {}".format(e))
 
             except Exception as e:
-                log.error('Could not extract information from {} ({}), falling back to direct'.format(song_url, e), exc_info=True)
+                log.error('Could not extract information from {} ({}), falling back to direct'.format(song_url, e),
+                          exc_info=True)
 
         dest_url = song_url
         if info.get('extractor'):
             dest_url = info.get('url')
 
-        if info.get('extractor', None) == 'twitch:stream': # may need to add other twitch types
+        if info.get('extractor', None) == 'twitch:stream':  # may need to add other twitch types
             title = info.get('description')
         else:
             title = info.get('title', 'Untitled')
@@ -180,7 +182,7 @@ class Playlist(EventEmitter, Serializable):
             self,
             song_url,
             title,
-            destination = dest_url,
+            destination=dest_url,
             **meta
         )
         self._add_entry(entry)
@@ -221,7 +223,7 @@ class Playlist(EventEmitter, Serializable):
                         item[url_field],
                         item.get('title', 'Untitled'),
                         item.get('duration', 0) or 0,
-						# items.get('thumbnail') or None,
+                        # items.get('thumbnail') or None,
                         self.downloader.ytdl.prepare_filename(item),
                         **meta
                     )
@@ -375,13 +377,12 @@ class Playlist(EventEmitter, Serializable):
     def count_for_user(self, user):
         return sum(1 for e in self.entries if e.meta.get('author', None) == user)
 
-
     def __json__(self):
         return self._enclose_json({
             'entries': list(self.entries)
         })
 
-    """Custom commands"""    
+    """Custom commands"""
 
     def remove_last(self):
         self.entries.pop()
@@ -397,4 +398,3 @@ class Playlist(EventEmitter, Serializable):
 
         # TODO: create a function to init downloading (since we don't do it here)?
         return pl
-
